@@ -1,0 +1,28 @@
+FROM python:3.13-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libffi-dev \
+    libssl-dev \
+    libjpeg-dev \
+    zlib1g-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir \
+    --retries 10 \
+    --timeout 120 \
+    -r requirements.txt
+
+COPY . .
+
+RUN mkdir -p /app/logs && touch /app/logs/real_estate.log
+
+CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]

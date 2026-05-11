@@ -1,0 +1,71 @@
+# ── Stage 1 : builder ─────────────────────────────────────────────────────────
+FROM python:3.13-slim
+
+WORKDIR /wheels
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libffi-dev \
+    libssl-dev \
+    libjpeg-dev \
+    zlib1g-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+
+# Filtre les packages dev-only (linters, formatters, testing, watchdog)
+RUN grep -v -E \
+    "^(black|flake8|isort|mypy-extensions|pycodestyle|pyflakes|mccabe|tomli|pathspec|platformdirs|pytest|Faker|watchdog|flower|argh|pyYAML)" \
+    requirements.txt > requirements.prod.txt
+
+RUN pip install --upgrade pip && \
+    pip wheel --no-cache-dir --wheel-dir /wheels -r requirements.prod.txt gunicorn
+
+
+# ── Stage 2 : image finale ────────────────────────────────────────────────────
+FROM python:3.13-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    DJANGO_SETTINGS_MODULE=real_estate.settings.production
+
+WORKDIR /app
+
+# Libs runtime uniquement (pas les headers de compilation)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libjpeg62-turbo \
+    zlib1g \
+    libssl3 \
+    libffi8 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Installe depuis les wheels pré-compilés (pas de gcc en prod)
+COPY --from=builder /wheels /wheels
+COPY --from=builder /wheels/requirements.prod.txt .
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir --no-index --find-links=/wheels -r requirements.prod.txt gunicorn \
+    && rm -rf /wheels /root/.cache
+
+# Utilisateur non-root
+RUN addgroup --system django && adduser --system --ingroup django django
+
+COPY . .
+
+RUN mkdir -p /app/logs && touch /app/logs/real_estate.log
+
+# Collecte des fichiers statiques (dummy vars — collectstatic ne touche pas la DB)
+RUN SECRET_KEY=build-dummy \
+    DEBUG=False \
+    POSTGRES_USER=dummy \
+    POSTGRES_PASSWORD=dummy \
+    POSTGRES_DB=dummy \
+    PG_HOST=localhost \
+    PG_PORT=5432 \
+    python manage.py collectstatic --noinput \
+    && chown -R django:django /app
+
+USER django
+
+EXPOSE 8000
+
+CMD ["gunicorn", "real_estate.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "3"]
