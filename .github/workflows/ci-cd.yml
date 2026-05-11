@@ -1,0 +1,232 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+
+  # ── Job 1 : Tests Django + couverture ──────────────────────────────────────
+  backend-tests:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: admin
+          POSTGRES_PASSWORD: admin12345
+          POSTGRES_DB: estate
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DJANGO_SETTINGS_MODULE: real_estate.settings.development
+      SECRET_KEY: test-ci-secret-key-not-for-production
+      DEBUG: "True"
+      POSTGRES_ENGINE: django.db.backends.postgresql
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin12345
+      POSTGRES_DB: estate
+      PG_HOST: localhost
+      PG_PORT: "5432"
+      SIGNING_KEY: test-signing-key
+      EMAIL_HOST: localhost
+      EMAIL_HOST_USER: test
+      EMAIL_HOST_PASSWORD: test
+      EMAIL_PORT: "25"
+      DOMAIN: localhost:8000
+      CELERY_BROKER: redis://localhost:6379/0
+      CELERY_BACKEND: redis://localhost:6379/0
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # requis pour SonarCloud (blame/historique)
+
+      - name: Setup Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        working-directory: ./backend
+        run: pip install -r requirements.txt
+
+      - name: Run tests with coverage
+        working-directory: ./backend
+        run: |
+          pytest \
+            --cov \
+            --cov-report=xml:coverage.xml \
+            --cov-config=setup.cfg \
+            -v
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: backend/coverage.xml
+          retention-days: 1
+
+  # ── Job 2 : Lint Next.js ────────────────────────────────────────────────────
+  frontend-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./client
+        run: npm install
+
+      - name: Lint
+        working-directory: ./client
+        run: npm run lint
+
+  # ── Job 3 : SonarCloud ─────────────────────────────────────────────────────
+  sonarcloud:
+    needs: [backend-tests, frontend-tests]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # nécessaire pour l'analyse des nouveaux/modifiés
+
+      - name: Download coverage report
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-report
+          path: backend/
+
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  # ── Job 4 : Security scan ───────────────────────────────────────────────────
+  security-scan:
+    needs: sonarcloud
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── CodeQL (SAST) ──────────────────────────────────────────────────────
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: python, javascript
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+
+      # ── Trivy — image backend ──────────────────────────────────────────────
+      - name: Build backend image for scan
+        run: docker build -f backend/Dockerfile.prod -t lugram/django-backend:scan ./backend
+
+      - name: Trivy scan — backend image
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: lugram/django-backend:scan
+          format: table
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+
+      # ── Trivy — image frontend ─────────────────────────────────────────────
+      - name: Build frontend image for scan
+        run: docker build -f client/Dockerfile.prod -t lugram/nextjs-frontend:scan ./client
+
+      - name: Trivy scan — frontend image
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: lugram/nextjs-frontend:scan
+          format: table
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+
+  # ── Job 5 : Build & Push Docker Hub ────────────────────────────────────────
+  build-and-push:
+    needs: security-scan
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push backend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile.prod
+          push: true
+          tags: |
+            lugram/django-backend:latest
+            lugram/django-backend:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./client
+          file: ./client/Dockerfile.prod
+          push: true
+          tags: |
+            lugram/nextjs-frontend:latest
+            lugram/nextjs-frontend:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
