@@ -18,6 +18,11 @@ COPY postcss.config.mjs .
 COPY components.json    .
 COPY next-env.d.ts      .
 
+# Utilisateur non-root
+RUN addgroup --system nodejs && adduser --system --ingroup nodejs nextjs \
+    && chown -R nextjs:nodejs /app
+USER nextjs
+
 EXPOSE 3000
 
 CMD ["sh", "-c", "npm install && npm run dev"]

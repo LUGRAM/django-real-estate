@@ -30,4 +30,9 @@ COPY pytest.ini   .
 
 RUN mkdir -p /app/logs && touch /app/logs/real_estate.log
 
+# Utilisateur non-root
+RUN addgroup --system django && adduser --system --ingroup django django \
+    && chown -R django:django /app
+USER django
+
 CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
