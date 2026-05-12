@@ -1,4 +1,4 @@
-# ── Stage 1 : builder ─────────────────────────────────────────────────────────
+# Stage 1 : builder 
 FROM python:3.13-slim
 
 WORKDIR /wheels
@@ -22,7 +22,7 @@ RUN pip install --upgrade pip && \
     pip wheel --no-cache-dir --wheel-dir /wheels -r requirements.prod.txt gunicorn
 
 
-# ── Stage 2 : image finale ────────────────────────────────────────────────────
+# Stage 2 : image finale 
 FROM python:3.13-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -49,11 +49,14 @@ RUN pip install --upgrade pip && \
 # Utilisateur non-root
 RUN addgroup --system django && adduser --system --ingroup django django
 
-COPY . .
+# Copies explicites — évite d'inclure .env, logs, tests, secrets
+COPY --chown=django:django apps/        ./apps/
+COPY --chown=django:django real_estate/ ./real_estate/
+COPY --chown=django:django manage.py    .
 
 RUN mkdir -p /app/logs && touch /app/logs/real_estate.log
 
-# Collecte des fichiers statiques (dummy vars — collectstatic ne touche pas la DB)
+# Collecte des fichiers statiques et changement de propriétaire pour éviter les problèmes de permissions en prod
 RUN SECRET_KEY=build-dummy \
     DEBUG=False \
     POSTGRES_USER=dummy \

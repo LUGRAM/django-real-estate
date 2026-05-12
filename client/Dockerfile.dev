@@ -6,7 +6,17 @@ ENV NEXT_TELEMETRY_DISABLED=1 \
 WORKDIR /app
 
 COPY package*.json ./
-COPY . .
+# Copies explicites — évite .env et fichiers sensibles
+COPY app/               ./app/
+COPY components/        ./components/
+COPY hooks/             ./hooks/
+COPY lib/               ./lib/
+COPY public/            ./public/
+COPY next.config.ts     .
+COPY tsconfig.json      .
+COPY postcss.config.mjs .
+COPY components.json    .
+COPY next-env.d.ts      .
 
 EXPOSE 3000
 

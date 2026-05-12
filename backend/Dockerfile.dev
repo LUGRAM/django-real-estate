@@ -21,7 +21,12 @@ RUN pip install --upgrade pip && \
     --timeout 120 \
     -r requirements.txt
 
-COPY . .
+# Copies explicites — les fichiers sensibles sont exclus via .dockerignore
+COPY apps/        ./apps/
+COPY real_estate/ ./real_estate/
+COPY manage.py    .
+COPY setup.cfg    .
+COPY pytest.ini   .
 
 RUN mkdir -p /app/logs && touch /app/logs/real_estate.log
 
