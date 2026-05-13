@@ -171,31 +171,35 @@ jobs:
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
 
-      # ── Trivy — image backend ──────────────────────────────────────────────
+# ── Trivy — installation manuelle ─────────────────────────────────────
+      - name: Install Trivy
+        run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
+            | sh -s -- -b /usr/local/bin
+
+# ── Trivy — image backend ──────────────────────────────────────────────
       - name: Build backend image for scan
         run: docker build -f backend/Dockerfile.prod -t lugram/django-backend:scan ./backend
 
       - name: Trivy scan — backend image
-        uses: aquasecurity/trivy-action@v0.30.0  # 0.30.0
-        with:
-          image-ref: lugram/django-backend:scan
-          format: table
-          severity: CRITICAL,HIGH
-          ignore-unfixed: true
-          exit-code: "1"
+        run: |
+          trivy image \
+            --severity CRITICAL,HIGH \
+            --ignore-unfixed \
+            --exit-code 1 \
+            lugram/django-backend:scan
 
-      # ── Trivy — image frontend ─────────────────────────────────────────────
+# ── Trivy — image frontend ─────────────────────────────────────────────
       - name: Build frontend image for scan
         run: docker build -f client/Dockerfile.prod -t lugram/nextjs-frontend:scan ./client
 
       - name: Trivy scan — frontend image
-        uses: aquasecurity/trivy-action@v0.30.0  # 0.30.0
-        with:
-          image-ref: lugram/nextjs-frontend:scan
-          format: table
-          severity: CRITICAL,HIGH
-          ignore-unfixed: true
-          exit-code: "1"
+        run: |
+          trivy image \
+            --severity CRITICAL,HIGH \
+            --ignore-unfixed \
+            --exit-code 1 \
+            lugram/nextjs-frontend:scan  
 
   # ── Job 5 : Build & Push Docker Hub ────────────────────────────────────────
   build-and-push:
