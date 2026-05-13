@@ -176,7 +176,7 @@ jobs:
         run: docker build -f backend/Dockerfile.prod -t lugram/django-backend:scan ./backend
 
       - name: Trivy scan — backend image
-        uses: aquasecurity/trivy-action@915b19bbe73b92a6cf82a1bc12b087c9a19a5fe2  # 0.28.0
+        uses: aquasecurity/trivy-action@0.30.0  # 0.30.0
         with:
           image-ref: lugram/django-backend:scan
           format: table
@@ -189,7 +189,7 @@ jobs:
         run: docker build -f client/Dockerfile.prod -t lugram/nextjs-frontend:scan ./client
 
       - name: Trivy scan — frontend image
-        uses: aquasecurity/trivy-action@915b19bbe73b92a6cf82a1bc12b087c9a19a5fe2  # 0.28.0
+        uses: aquasecurity/trivy-action@0.30.0  # 0.30.0
         with:
           image-ref: lugram/nextjs-frontend:scan
           format: table
