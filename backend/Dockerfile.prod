@@ -59,6 +59,7 @@ RUN mkdir -p /app/logs && touch /app/logs/real_estate.log
 # Collecte des fichiers statiques et changement de propriétaire pour éviter les problèmes de permissions en prod
 RUN SECRET_KEY=build-dummy \
     DEBUG=False \
+    ALLOWED_HOSTS=localhost \
     POSTGRES_USER=dummy \
     POSTGRES_PASSWORD=dummy \
     POSTGRES_DB=dummy \
