@@ -60,6 +60,14 @@ RUN mkdir -p /app/logs && touch /app/logs/real_estate.log
 RUN SECRET_KEY=build-dummy \
     DEBUG=False \
     ALLOWED_HOSTS=localhost \
+    SIGNING_KEY=build-dummy-signing-key \
+    EMAIL_HOST=localhost \
+    EMAIL_HOST_USER=dummy \
+    EMAIL_HOST_PASSWORD=dummy \
+    EMAIL_PORT=25 \
+    DOMAIN=localhost \
+    CELERY_BROKER=redis://localhost:6379/0 \
+    CELERY_BACKEND=redis://localhost:6379/0 \
     POSTGRES_USER=dummy \
     POSTGRES_PASSWORD=dummy \
     POSTGRES_DB=dummy \
