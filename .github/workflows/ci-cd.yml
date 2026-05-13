@@ -19,6 +19,7 @@ jobs:
           POSTGRES_USER: admin
           POSTGRES_PASSWORD: admin12345
           POSTGRES_DB: estate
+          
         ports:
           - 5432:5432
         options: >-
@@ -41,6 +42,7 @@ jobs:
       DJANGO_SETTINGS_MODULE: real_estate.settings.development
       SECRET_KEY: test-ci-secret-key-not-for-production
       DEBUG: "True"
+      ALLOWED_HOSTS: "localhost 127.0.0.1"
       POSTGRES_ENGINE: django.db.backends.postgresql
       POSTGRES_USER: admin
       POSTGRES_PASSWORD: admin12345
