@@ -54,10 +54,9 @@ COPY --chown=django:django apps/        ./apps/
 COPY --chown=django:django real_estate/ ./real_estate/
 COPY --chown=django:django manage.py    .
 
-RUN mkdir -p /app/logs && touch /app/logs/real_estate.log
-
-# Collecte des fichiers statiques et changement de propriétaire pour éviter les problèmes de permissions en prod
-RUN SECRET_KEY=build-dummy \
+# Création des logs et collecte des statiques en une seule étape
+RUN mkdir -p /app/logs && touch /app/logs/real_estate.log && \
+    SECRET_KEY=build-dummy \
     DEBUG=False \
     ALLOWED_HOSTS=localhost \
     SIGNING_KEY=build-dummy-signing-key \
@@ -68,6 +67,7 @@ RUN SECRET_KEY=build-dummy \
     DOMAIN=localhost \
     CELERY_BROKER=redis://localhost:6379/0 \
     CELERY_BACKEND=redis://localhost:6379/0 \
+    POSTGRES_ENGINE=django.db.backends.postgresql \
     POSTGRES_USER=dummy \
     POSTGRES_PASSWORD=dummy \
     POSTGRES_DB=dummy \
@@ -75,7 +75,7 @@ RUN SECRET_KEY=build-dummy \
     PG_PORT=5432 \
     python manage.py collectstatic --noinput \
     && chown -R django:django /app
-
+      
 USER django
 
 EXPOSE 8000
