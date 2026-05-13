@@ -6,7 +6,7 @@ charset-normalizer==3.3.2
 click==8.1.7
 cryptography==42.0.5
 defusedxml==0.8.0rc2
-Django==5.0
+Django==5.0.10
 django-autoslug==1.9.9
 django-countries==7.6.1
 django-environ==0.11.2
@@ -42,14 +42,15 @@ sqlparse==0.5.0
 tomli==2.0.1
 typing_extensions==4.12.2
 urllib3==2.2.1
+pytest==8.2.0
 pytest-django==4.9.0
 pytest-factoryboy==2.7.0
 Faker==24.0.0
-pytest-cov==4.1.0
+pytest-cov==5.0.0
 redis==5.0.3
 celery==5.3.6
 flower==2.0.1
 django-celery-email==3.0.0
 argh==0.26.2
-pyYAML==5.3.1
+pyYAML==6.0.1
 watchdog==1.0.2
