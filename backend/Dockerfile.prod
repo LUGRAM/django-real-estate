@@ -33,7 +33,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Application des patchs de sécurité et installation des bibliothèques runtime nécessaires
+# Application des patchs de sécurité et packages runtime
 RUN apt-get update && apt-get upgrade -y --no-install-recommends \
     && apt-get install -y --no-install-recommends \
     libjpeg62-turbo \
@@ -42,21 +42,20 @@ RUN apt-get update && apt-get upgrade -y --no-install-recommends \
     libffi8 \
     && rm -rf /var/lib/apt/lists/*
 
-# Récupération et installation des wheels pré-compilés (pas de compilateur GCC en production)
+# Récupération des wheels du stage précédent
 COPY --from=builder /wheels /wheels
 COPY --from=builder /wheels/requirements.prod.txt .
-RUN addgroup --system django \
-    && adduser --system --ingroup django django \
-    && mkdir -p /app/logs \
-    && touch /app/logs/real_estate.log
-    
-# Copies ciblées du code source (évite l'inclusion de fichiers sensibles ou inutiles)
+
+# Ici on copie le code applicatif
 COPY --chown=django:django apps/        ./apps/
 COPY --chown=django:django real_estate/ ./real_estate/
 COPY --chown=django:django manage.py    .
 
-# Initialisation des répertoires de logs et compilation des fichiers statiques Django
-RUN mkdir -p /app/logs && touch /app/logs/real_estate.log && \
+# On installe, on crée l'utilisateur, on génère les logs et on fait le collectstatic
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir --no-index --find-links=/wheels -r requirements.prod.txt gunicorn && \
+    addgroup --system django && adduser --system --ingroup django django && \
+    mkdir -p /app/logs && touch /app/logs/real_estate.log && \
     SECRET_KEY=build-dummy \
     DEBUG=False \
     ALLOWED_HOSTS=localhost \
@@ -74,8 +73,9 @@ RUN mkdir -p /app/logs && touch /app/logs/real_estate.log && \
     POSTGRES_DB=dummy \
     PG_HOST=localhost \
     PG_PORT=5432 \
-    python manage.py collectstatic --noinput \
-    && chown -R django:django /app
+    python manage.py collectstatic --noinput && \
+    rm -rf /wheels /root/.cache && \
+    chown -R django:django /app
       
 USER django
 
