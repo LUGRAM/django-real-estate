@@ -19,7 +19,7 @@ export default function PropertyPage() {
   useEffect(() => {
     const fetchProperty = async () => {
       if (typeof id === 'string') {
-        const data = await propertyService.getById(id);
+        const data = await propertyService.getOne(id);
         setProperty(data || null);
         setLoading(false);
       }
