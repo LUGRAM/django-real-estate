@@ -66,7 +66,7 @@ jobs:
       - name: Create logs directory
         run: mkdir -p backend/logs && touch backend/logs/real_estate.log
 
-      - name: Setup Python 3.14
+      - name: Setup Python 3.12
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -77,8 +77,6 @@ jobs:
         working-directory: ./backend
         run: |
           python -m pip install --upgrade pip
-          pip uninstall -y pytest pytest-factoryboy typing-extensions || true
-          pip install "pytest>=8.2.0" "pytest-factoryboy==2.7.0" "typing-extensions>=4.12.2"
           pip install -r requirements.txt
 
       - name: Run tests with coverage
