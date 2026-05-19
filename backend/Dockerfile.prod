@@ -3,7 +3,7 @@ FROM python:3.12-slim AS builder
 
 WORKDIR /wheels
 
-# ← AJOUT : upgrade packages Debian avant install
+# Mise à niveau des paquets système pour corriger les vulnérabilités OS (Trivy)
 RUN apt-get update && apt-get upgrade -y --no-install-recommends \
     && apt-get install -y --no-install-recommends \
     build-essential \
@@ -15,6 +15,7 @@ RUN apt-get update && apt-get upgrade -y --no-install-recommends \
 
 COPY requirements.txt .
 
+# Filtrage des dépendances de développement (linters, outils de test, etc.)
 RUN grep -v -E \
     "^(black|flake8|isort|mypy-extensions|pycodestyle|pyflakes|mccabe|tomli|pathspec|platformdirs|pytest|Faker|watchdog|flower|argh|pyYAML)" \
     requirements.txt > requirements.prod.txt
@@ -32,7 +33,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# ← AJOUT : upgrade packages Debian avant install runtime
+# Application des patchs de sécurité et installation des bibliothèques runtime nécessaires
 RUN apt-get update && apt-get upgrade -y --no-install-recommends \
     && apt-get install -y --no-install-recommends \
     libjpeg62-turbo \
@@ -41,22 +42,20 @@ RUN apt-get update && apt-get upgrade -y --no-install-recommends \
     libffi8 \
     && rm -rf /var/lib/apt/lists/*
 
-# Installe depuis les wheels pré-compilés (pas de gcc en prod)
+# Récupération et installation des wheels pré-compilés (pas de compilateur GCC en production)
 COPY --from=builder /wheels /wheels
 COPY --from=builder /wheels/requirements.prod.txt .
-RUN pip install --upgrade pip && \
-    pip install --no-cache-dir --no-index --find-links=/wheels -r requirements.prod.txt gunicorn \
-    && rm -rf /wheels /root/.cache
-
-# Utilisateur non-root
-RUN addgroup --system django && adduser --system --ingroup django django
-
-# Copies explicites — évite d'inclure .env, logs, tests, secrets
+RUN addgroup --system django \
+    && adduser --system --ingroup django django \
+    && mkdir -p /app/logs \
+    && touch /app/logs/real_estate.log
+    
+# Copies ciblées du code source (évite l'inclusion de fichiers sensibles ou inutiles)
 COPY --chown=django:django apps/        ./apps/
 COPY --chown=django:django real_estate/ ./real_estate/
 COPY --chown=django:django manage.py    .
 
-# Création des logs et collecte des statiques en une seule étape
+# Initialisation des répertoires de logs et compilation des fichiers statiques Django
 RUN mkdir -p /app/logs && touch /app/logs/real_estate.log && \
     SECRET_KEY=build-dummy \
     DEBUG=False \
