@@ -1,5 +1,5 @@
 # Stage 1 : builder 
-FROM python:3.13-slim AS builder
+FROM python:3.14-slim AS builder
 
 WORKDIR /wheels
 
@@ -23,7 +23,7 @@ RUN pip install --upgrade pip && \
 
 
 # Stage 2 : image finale 
-FROM python:3.13-slim
+FROM python:3.14-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
