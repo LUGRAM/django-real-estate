@@ -176,7 +176,7 @@ jobs:
 
       # ── Backend : Trivy scan ───────────────────────────────────────────────
       - name: Security scan (Trivy) — backend
-        uses: aquasecurity/trivy-action@v0.28.0        
+        uses: aquasecurity/trivy-action@v0.36.0        
         with:
           image-ref: lugram/django-backend:${{ github.sha }}
           format: table
@@ -205,7 +205,7 @@ jobs:
 
       # ── Frontend : Trivy scan ──────────────────────────────────────────────
       - name: Security scan (Trivy) — frontend
-        uses: aquasecurity/trivy-action@v0.28.0        # la version 0.28.0 de trivy
+        uses: aquasecurity/trivy-action@v0.36.0        # la version stable de trivy
         with:
           image-ref: lugram/nextjs-frontend:${{ github.sha }}
           format: table
