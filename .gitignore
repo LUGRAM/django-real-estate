@@ -147,3 +147,4 @@ client/.next/
 .agents/
 .n8nac/
 !client/lib/
+!client/public/
