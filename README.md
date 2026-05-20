@@ -40,7 +40,7 @@ Application immobilière full-stack conteneurisée avec Django REST Framework, N
    ┌──────────────────┐        ┌──────────────────────┐
    │    FRONTEND      │        │       BACKEND        │
    │  Next.js 15      │        │   Django 5 + DRF     │
-   │  node:20-alpine  │        │  python:3.13-slim    │
+   │  node:20-alpine  │        │  python:3.12-slim    │
    │  :3000           │        │  :8000               │
    └──────────────────┘        └──────────┬───────────┘
                                           │
@@ -97,6 +97,7 @@ cp .env.example .env
 
 ```env
 SECRET_KEY="votre-cle-secrete-django"
+SIGNING_KEY="votre-cle-jwt"
 POSTGRES_PASSWORD=votre_mot_de_passe
 ```
 
@@ -128,8 +129,8 @@ docker compose up -d --build
 | Frontend | http://localhost:8080 | Interface Next.js (via Nginx) |
 | API REST | http://localhost:8080/api/v1 | Django REST Framework |
 | Admin Django | http://localhost:8080/admin | Back-office Django |
-| API directe | http://localhost:8000 | Backend sans proxy (dev) |
-| Frontend direct | http://localhost:3000 | Next.js sans proxy (dev) |
+| Backend direct | http://localhost:8000 | API sans proxy (dev) |
+| Frontend direct | http://localhost:3001 | Next.js sans proxy (dev) |
 
 ### Créer un superutilisateur Django
 
@@ -141,10 +142,10 @@ docker compose exec backend python manage.py createsuperuser
 
 ## 5. Pipeline CI/CD
 
-Le fichier `.github/workflows/ci-cd.yml` définit 5 jobs exécutés à chaque `push` sur `main` ou `develop`.
+Le fichier `.github/workflows/ci-cd.yml` définit 5 jobs exécutés à chaque `push` sur `master` ou `develop`.
 
 ```
-push -> main / develop
+push → master / develop
          │
     ┌────┴─────┐
     ▼          ▼
@@ -153,21 +154,16 @@ backend-   frontend-        (Jobs 1 & 2 — parallèles)
  + coverage  + lint
     │          │
     └────┬─────┘
-         ▼
-   sonarcloud                (Job 3 — analyse qualité du code)
-   ├── Couverture Python (coverage.xml)
-   └── Analyse JS/TS + quality gate
-         │
-         ▼
-   security-scan             (Job 4 — sécurité)
-   ├── CodeQL SAST (Python + JavaScript)
-   ├── Trivy -> backend image (CRITICAL + HIGH)
-   └── Trivy -> frontend image
-         │
-         ▼  (main uniquement)
-   build-and-push            (Job 5)
-   ├── lugram/django-backend:latest  + :<SHA>
-   └── lugram/nextjs-frontend:latest + :<SHA>
+         ├──────────────────────┐
+         ▼                      ▼
+   sonarcloud              sast (CodeQL)        (Jobs 3 & 4 — parallèles)
+   qualité + couverture    Python + JavaScript
+         │                      │
+         └──────────┬───────────┘
+                    ▼  (master uniquement)
+            build-and-push                      (Job 5)
+            ├── build backend  → Trivy → push
+            └── build frontend → Trivy → push
 ```
 
 ### Job 1 — `backend-tests`
@@ -181,20 +177,24 @@ Installe les dépendances Node 20 et exécute `npm run lint` (ESLint via `eslint
 
 ### Job 3 — `sonarcloud`
 
-- **SonarCloud** : analyse la qualité du code (bugs, code smells, duplications, couverture de tests).
+- Analyse la qualité du code (bugs, code smells, duplications, couverture de tests).
 - Utilise `sonar-project.properties` à la racine du projet.
 - Le **Quality Gate** bloque le pipeline si le score descend sous le seuil défini sur sonarcloud.io.
 
-### Job 4 — `security-scan`
+### Job 4 — `sast`
 
-- **CodeQL** : analyse statique du code source (Python + JavaScript). Résultats visibles dans l'onglet *Security* du dépôt GitHub.
-- **Trivy** : scan des images Docker de production sur les CVE `CRITICAL` et `HIGH` ayant un correctif disponible (`ignore-unfixed: true`). Le pipeline échoue si des vulnérabilités corrigeables sont détectées.
+- **CodeQL** en mode matrice : analyse statique `python` et `javascript` en parallèle.
+- Les résultats sont publiés dans l'onglet *Security → Code scanning* du dépôt GitHub.
+- Le job échoue si CodeQL détecte des vulnérabilités critiques.
 
 ### Job 5 — `build-and-push`
 
-S'exécute **uniquement sur `main`** après validation de tous les scans.
-Utilise le cache GitHub Actions (`type=gha`) pour réduire les temps de build.
-Pousse deux tags par image : `:latest` et `:<SHA>` pour la traçabilité.
+S'exécute **uniquement sur `master`** après validation de `sonarcloud` et `sast`.
+
+Pour chaque image (backend, frontend) :
+1. **Build** avec le cache GitHub Actions (`type=gha`)
+2. **Trivy scan** — bloque si une CVE `CRITICAL` ou `HIGH` corrigeable est détectée
+3. **Push** vers Docker Hub avec deux tags : `:latest` et `:<SHA>`
 
 ### Secrets GitHub requis
 
@@ -202,10 +202,9 @@ Pousse deux tags par image : `:latest` et `:<SHA>` pour la traçabilité.
 
 | Secret | Valeur |
 |--------|--------|
-| `SONAR_TOKEN` | Token généré sur sonarcloud.io → *My Account → Security* |
-| `SONAR_HOST_URL` | `https://sonarcloud.io` |
+| `SONAR_TOKEN` | Généré sur sonarcloud.io → *My Account → Security* |
 | `DOCKER_USERNAME` | `lugram` |
-| `DOCKER_PASSWORD` | Token Docker Hub (`Account Settings → Security → New Access Token`) |
+| `DOCKER_PASSWORD` | Token Docker Hub (*Account Settings → Security → New Access Token*) |
 
 ---
 
@@ -215,7 +214,7 @@ Pousse deux tags par image : `:latest` et `:<SHA>` pour la traçabilité.
 
 | Service | Image | Raison |
 |---------|-------|--------|
-| Backend | `python:3.13-slim` | ~50 Mo vs ~900 Mo pour l'image complète |
+| Backend (prod) | `python:3.12-slim` | ~50 Mo vs ~900 Mo pour l'image complète |
 | Frontend | `node:20-alpine` | ~7 Mo vs ~300 Mo pour node:20 |
 | Postgres | `postgres:16-alpine` | Version LTS stable |
 | Redis | `redis:7-alpine` | Dernière version stable |
@@ -225,15 +224,15 @@ Pousse deux tags par image : `:latest` et `:<SHA>` pour la traçabilité.
 
 Les `Dockerfile.prod` utilisent deux stages :
 
-- **Stage `builder`** : contient `build-essential`, `gcc`, headers de compilation — nécessaires pour compiler `psycopg2`, `cryptography`, `Pillow` (backend) et pour exécuter `next build` (frontend).
-- **Stage final** : copie uniquement les artefacts compilés (wheels Python / `.next/standalone` Next.js). Aucun outil de build dans l'image de production.
+- **Stage `builder`** : contient `build-essential`, `gcc`, headers de compilation — nécessaires pour compiler les wheels Python (`psycopg2`, `cryptography`, `Pillow`) et pour exécuter `next build`.
+- **Stage final** : copie uniquement les artefacts compilés (wheels Python / `.next/standalone`). Aucun outil de build dans l'image de production.
 
 ### Isolation réseau
 
 Deux réseaux Docker bridge séparés :
 
 - `backend-network` : données sensibles (base de données, cache, workers)
-- `app-network` : trafic HTTP public (proxy ↔ frontend/backend)
+- `app-network` : trafic HTTP public (proxy ↔ frontend ↔ backend)
 
 `postgres-db` et `redis` ne sont jamais accessibles depuis `nginx` ou `frontend`.
 
@@ -241,8 +240,8 @@ Deux réseaux Docker bridge séparés :
 
 ```yaml
 volumes:
-  - ./client:/app                          # bind mount du code source
-  - node_modules_frontend:/app/node_modules  # volume nommé Docker
+  - ./client:/app                             # bind mount du code source
+  - node_modules_frontend:/app/node_modules   # volume nommé Docker
 ```
 
 Le bind mount `./client:/app` écraserait le `node_modules` installé lors du build.
@@ -250,7 +249,7 @@ Un **volume nommé** Docker est monté par-dessus et préserve les packages inst
 
 Avantages du volume nommé vs volume anonyme :
 - Persistance entre les redémarrages sans rebuild
-- Pas d'erreur `ENOTEMPTY` sur Windows (overlay fs) lors de `npm install`
+- Pas d'erreur `ENOTEMPTY` sur Windows lors de `npm install`
 - Inspecté et géré via `docker volume ls` / `docker volume inspect`
 
 ### Celery séparé du backend
@@ -263,7 +262,7 @@ Même image Docker, commande différente. Avantages :
 
 ### Utilisateurs non-root
 
-Les containers de production `backend` (`django`) et `frontend` (`nextjs`) tournent sous des utilisateurs système sans shell, conformément aux bonnes pratiques de sécurité Docker.
+Les containers de production `backend` (`django`) et `frontend` (`nextjs`) tournent sous des utilisateurs système sans shell, conformément aux bonnes pratiques de sécurité Docker (CIS Benchmark).
 
 ---
 
