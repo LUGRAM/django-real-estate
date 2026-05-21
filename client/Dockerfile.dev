@@ -6,23 +6,16 @@ ENV NEXT_TELEMETRY_DISABLED=1 \
 WORKDIR /app
 
 COPY package*.json ./
-# Copies explicites — évite .env et fichiers sensibles
 COPY app/               ./app/
 COPY components/        ./components/
 COPY hooks/             ./hooks/
 COPY lib/               ./lib/
-#COPY public/            ./public/
 COPY next.config.ts     .
 COPY tsconfig.json      .
 COPY postcss.config.mjs .
 COPY components.json    .
 COPY next-env.d.ts      .
 
-# Utilisateur non-root
-RUN addgroup --system nodejs && adduser --system --ingroup nodejs nextjs \
-    && chown -R nextjs:nodejs /app
-USER nextjs
-
 EXPOSE 3000
 
-CMD ["sh", "-c", "npm install && npm run dev"]
+ENTRYPOINT ["sh", "-c", "npm install && npm run dev"]
